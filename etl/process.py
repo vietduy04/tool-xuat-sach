@@ -7,6 +7,8 @@ from utils.logger import get_logger
 
 logger = get_logger()
 
+REPORT_TYPE_TTKT = "Báo cáo XS TTKT"
+
 
 def preprocess_rules(rule_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -191,7 +193,8 @@ def process_chunk(
     df: pd.DataFrame,
     lookup_df: pd.DataFrame,
     rule_RD: pd.DataFrame,
-    rule_KN: pd.DataFrame
+    rule_KN: pd.DataFrame,
+    report_type: str
 ) -> pd.DataFrame:
     """
     Process a chunk of data: calculations, joins, and rule application.
@@ -206,6 +209,7 @@ def process_chunk(
         Processed DataFrame
     """
     try:
+        use_ttkt_report = report_type == REPORT_TYPE_TTKT
         
         # Vectorized CNHUB
         df['CNHUB'] = df['don_vi_khaithac'].str[3:6]
@@ -217,8 +221,11 @@ def process_chunk(
         df['chi_nhanh_phat'] = df['ma_tinh']
         df.drop(columns=['ma_tinh', 'ma_buucuc'], inplace=True, errors='ignore')
         
-        # Vectorized loai_hang
-        df['phan_loai'] = np.where(df['CNHUB'] == df['chi_nhanh_phat'], 'RD', 'KN')
+        # Vectorized loai_hang depending on report type
+        if use_ttkt_report:
+            df['phan_loai'] = 'RD'
+        else:
+            df['phan_loai'] = np.where(df['CNHUB'] == df['chi_nhanh_phat'], 'RD', 'KN')
         
         # Datetime columns are already parsed in preprocessing step
         
@@ -243,18 +250,19 @@ def process_chunk(
             df.loc[deadline_RD.index, 'deadline'] = deadline_RD
             df.loc[timedelta_RD.index, 'timedelta'] = timedelta_RD
         
-        # KN subset
-        df_KN = df[df['phan_loai'] == 'KN']
-        if not df_KN.empty:
-            res_KN, deadline_KN, timedelta_KN = compute_result_for_subset(
-                df_KN,
-                rule_KN,
-                left_on=['don_vi_khaithac', 'chi_nhanh_phat'],
-                right_on=['don_vi_khai_thac', 'chi_nhanh_phat']
-            )
-            df.loc[res_KN.index, 'Result_p'] = res_KN
-            df.loc[deadline_KN.index, 'deadline'] = deadline_KN
-            df.loc[timedelta_KN.index, 'timedelta'] = timedelta_KN
+        # KN subset (skip for TTKT report)
+        if not use_ttkt_report:
+            df_KN = df[df['phan_loai'] == 'KN']
+            if not df_KN.empty:
+                res_KN, deadline_KN, timedelta_KN = compute_result_for_subset(
+                    df_KN,
+                    rule_KN,
+                    left_on=['don_vi_khaithac', 'chi_nhanh_phat'],
+                    right_on=['don_vi_khai_thac', 'chi_nhanh_phat']
+                )
+                df.loc[res_KN.index, 'Result_p'] = res_KN
+                df.loc[deadline_KN.index, 'deadline'] = deadline_KN
+                df.loc[timedelta_KN.index, 'timedelta'] = timedelta_KN
         
         logger.debug(f"Processed chunk with {len(df)} rows")
         return df

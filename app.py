@@ -73,6 +73,17 @@ def main():
             accept_multiple_files=True,
             key='raw_files_uploader'
         )
+        report_type_options = [
+            "Báo cáo XS kho vùng tỉnh",
+            "Báo cáo XS TTKT"
+        ]
+        report_type = st.selectbox(
+            "Loại báo cáo",
+            options=report_type_options,
+            index=0,
+            key='report_type_select'
+        )
+        st.session_state.report_type = report_type
         
         separate_files = st.checkbox(
             "Output to separate files for each rule type",
@@ -90,7 +101,7 @@ def main():
             elif not st.session_state.config_data.get('rule_kn_file'):
                 st.error("Cần upload rule Kết nối")
             else:
-                process_files(raw_files, separate_files)
+                process_files(raw_files, separate_files, report_type)
     
     with col2:
         st.subheader("Output")
@@ -195,7 +206,7 @@ def main():
                 update_config('chunk_size', int(chunk_size))
 
 
-def process_files(raw_files, separate_files: bool):
+def process_files(raw_files, separate_files: bool, report_type: str):
     """Process uploaded files through the ETL pipeline."""
     st.session_state.processing = True
     st.session_state.progress = 0
@@ -257,7 +268,8 @@ def process_files(raw_files, separate_files: bool):
                         chunk,
                         lookup_df,
                         rule_RD,
-                        rule_KN
+                        rule_KN,
+                        report_type
                     )
                     
                     # Validate (placeholder)
