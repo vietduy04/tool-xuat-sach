@@ -158,6 +158,9 @@ def compute_result_for_subset(
         # Calculate timedelta only for "Sai hẹn" rows
         timedelta_series = pd.Series(index=df_subset.index, dtype='timedelta64[ns]')
         sai_hen_mask = res == 'Sai hẹn'
+        timedelta_text = pd.Series(index=timedelta_series.index, dtype="string")
+        timedelta_text[:] = ""
+
         if sai_hen_mask.any():
             tg_laixe_nhan = pd.to_datetime(df_subset.loc[sai_hen_mask, 'tg_laixe_nhan'])
             expected_dt_for_sai_hen = expected_dt_series[sai_hen_mask]
@@ -166,7 +169,6 @@ def compute_result_for_subset(
 
             # Convert timedelta to string format "D.HH:MM:SS" for PowerQuery
             td = timedelta_series.dt.components
-            timedelta_text = pd.Series(index=timedelta_series.index, dtype="string")
             
             # Format only valid rows
             timedelta_text[sai_hen_mask] = (
@@ -179,9 +181,6 @@ def compute_result_for_subset(
                 + td.loc[sai_hen_mask, "seconds"].astype("int64").astype(str).str.zfill(2)
             )
 
-            # Leave NaT as empty string instead of NA
-            timedelta_text[~sai_hen_mask] = ""
-        
         return res, expected_dt_series, timedelta_text
     except Exception as e:
         logger.error(f"Error computing result for subset: {e}")
