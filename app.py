@@ -18,7 +18,7 @@ logger = get_logger()
 
 # Page configuration
 st.set_page_config(
-    page_title="ETL Pipeline - Xuất Sách",
+    page_title="Luồng ETL Xuất sạch",
     page_icon="📊",
     layout="wide"
 )
@@ -40,7 +40,7 @@ def save_uploaded_file(uploaded_file, file_type: str, persistent: bool = False) 
         # Save to a persistent config directory
         config_dir = os.path.join(os.getcwd(), ".config_files")
         os.makedirs(config_dir, exist_ok=True)
-        file_path = os.path.join(config_dir, f"{file_type}_{uploaded_file.name}")
+        file_path = os.path.join(config_dir, f"{uploaded_file.name}")
     else:
         # Save to temporary location
         temp_dir = tempfile.mkdtemp()
@@ -54,79 +54,10 @@ def save_uploaded_file(uploaded_file, file_type: str, persistent: bool = False) 
 def main():
     """Main Streamlit application."""
     # Title and Description
-    st.title("📊 ETL Pipeline - Xuất Sách")
+    st.title("Luồng ETL Xuất sạch")
     st.markdown("""
-    This tool processes Excel files through an ETL pipeline:
-    - **Ingest**: Convert Excel to CSV and select required columns
-    - **Preprocess**: Handle nulls and standardize datetime
-    - **Process**: Apply business logic and rules
-    - **Validate**: Data validation (placeholder)
-    - **Output**: Generate CSV files
+    Đọc kĩ hưỡng dẫn sử dụng trước khi dùng
     """)
-    
-    st.divider()
-    
-    # Configuration Section
-    st.header("⚙️ Configuration")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Lookup Table")
-        lookup_file = st.file_uploader(
-            "Upload Lookup Excel File",
-            type=['xlsx'],
-            key='lookup_uploader'
-        )
-        if lookup_file is not None:
-            lookup_path = save_uploaded_file(lookup_file, "lookup", persistent=True)
-            st.session_state.config_data['lookup_file'] = lookup_path
-            update_config('lookup_file', lookup_path)
-            st.success(f"✓ Lookup file uploaded: {lookup_file.name}")
-        elif st.session_state.config_data.get('lookup_file'):
-            lookup_path = st.session_state.config_data['lookup_file']
-            if os.path.exists(lookup_path):
-                st.info(f"Using saved file: {os.path.basename(lookup_path)}")
-            else:
-                st.warning("Saved lookup file not found. Please upload again.")
-                st.session_state.config_data['lookup_file'] = None
-    
-    with col2:
-        st.subheader("Rules")
-        rule_rd_file = st.file_uploader(
-            "Upload RD Rule Excel File",
-            type=['xlsx'],
-            key='rule_rd_uploader'
-        )
-        if rule_rd_file is not None:
-            rule_rd_path = save_uploaded_file(rule_rd_file, "rule_rd", persistent=True)
-            st.session_state.config_data['rule_rd_file'] = rule_rd_path
-            update_config('rule_rd_file', rule_rd_path)
-            st.success(f"✓ RD rule file uploaded: {rule_rd_file.name}")
-        elif st.session_state.config_data.get('rule_rd_file'):
-            rule_rd_path = st.session_state.config_data['rule_rd_file']
-            if os.path.exists(rule_rd_path):
-                st.info(f"Using saved file: {os.path.basename(rule_rd_path)}")
-            else:
-                st.warning("Saved RD rule file not found. Please upload again.")
-                st.session_state.config_data['rule_rd_file'] = None
-        
-        rule_kn_file = st.file_uploader(
-            "Upload KN Rule Excel File",
-            type=['xlsx'],
-            key='rule_kn_uploader'
-        )
-        if rule_kn_file is not None:
-            rule_kn_path = save_uploaded_file(rule_kn_file, "rule_kn", persistent=True)
-            st.session_state.config_data['rule_kn_file'] = rule_kn_path
-            update_config('rule_kn_file', rule_kn_path)
-            st.success(f"✓ KN rule file uploaded: {rule_kn_file.name}")
-        elif st.session_state.config_data.get('rule_kn_file'):
-            rule_kn_path = st.session_state.config_data['rule_kn_file']
-            if os.path.exists(rule_kn_path):
-                st.info(f"Using saved file: {os.path.basename(rule_kn_path)}")
-            else:
-                st.warning("Saved KN rule file not found. Please upload again.")
-                st.session_state.config_data['rule_kn_file'] = None
     
     st.divider()
     
@@ -151,13 +82,13 @@ def main():
         
         if st.button("🚀 Process Files", type="primary", disabled=st.session_state.processing):
             if not raw_files:
-                st.error("Please upload at least one raw file")
+                st.error("Cần upload file raw để chạy")
             elif not st.session_state.config_data.get('lookup_file'):
-                st.error("Please upload a lookup file")
+                st.error("Cần upload file tham chiếu")
             elif not st.session_state.config_data.get('rule_rd_file'):
-                st.error("Please upload RD rule file")
+                st.error("Cần upload rule Rải đích")
             elif not st.session_state.config_data.get('rule_kn_file'):
-                st.error("Please upload KN rule file")
+                st.error("Cần upload rule Kết nối")
             else:
                 process_files(raw_files, separate_files)
     
@@ -180,11 +111,68 @@ def main():
     
     st.divider()
     
-    # Advanced Section
-    with st.expander("🔧 Advanced Configuration"):
-        col1, col2 = st.columns(2)
+    # Configuration Section in Sidebar
+    with st.sidebar:
+        st.header("⚙️ Configuration")
         
-        with col1:
+        st.subheader("Lookup Table")
+        lookup_file = st.file_uploader(
+            "Upload file Excel tham chiếu",
+            type=['xlsx'],
+            key='lookup_uploader'
+        )
+        if lookup_file is not None:
+            lookup_path = save_uploaded_file(lookup_file, "lookup", persistent=True)
+            st.session_state.config_data['lookup_file'] = lookup_path
+            update_config('lookup_file', lookup_path)
+            st.success(f"✓ Lookup file uploaded: {lookup_file.name}")
+        elif st.session_state.config_data.get('lookup_file'):
+            lookup_path = st.session_state.config_data['lookup_file']
+            if os.path.exists(lookup_path):
+                st.info(f"Using saved file: {os.path.basename(lookup_path)}")
+            else:
+                st.warning("Saved lookup file not found. Please upload again.")
+                st.session_state.config_data['lookup_file'] = None
+        
+        st.subheader("Rules")
+        rule_rd_file = st.file_uploader(
+            "Upload rule Rải đích",
+            type=['xlsx'],
+            key='rule_rd_uploader'
+        )
+        if rule_rd_file is not None:
+            rule_rd_path = save_uploaded_file(rule_rd_file, "rule_rd", persistent=True)
+            st.session_state.config_data['rule_rd_file'] = rule_rd_path
+            update_config('rule_rd_file', rule_rd_path)
+            st.success(f"✓ RD rule file uploaded: {rule_rd_file.name}")
+        elif st.session_state.config_data.get('rule_rd_file'):
+            rule_rd_path = st.session_state.config_data['rule_rd_file']
+            if os.path.exists(rule_rd_path):
+                st.info(f"Using saved file: {os.path.basename(rule_rd_path)}")
+            else:
+                st.warning("Saved RD rule file not found. Please upload again.")
+                st.session_state.config_data['rule_rd_file'] = None
+        
+        rule_kn_file = st.file_uploader(
+            "Upload rule Kết nối",
+            type=['xlsx'],
+            key='rule_kn_uploader'
+        )
+        if rule_kn_file is not None:
+            rule_kn_path = save_uploaded_file(rule_kn_file, "rule_kn", persistent=True)
+            st.session_state.config_data['rule_kn_file'] = rule_kn_path
+            update_config('rule_kn_file', rule_kn_path)
+            st.success(f"✓ KN rule file uploaded: {rule_kn_file.name}")
+        elif st.session_state.config_data.get('rule_kn_file'):
+            rule_kn_path = st.session_state.config_data['rule_kn_file']
+            if os.path.exists(rule_kn_path):
+                st.info(f"Using saved file: {os.path.basename(rule_kn_path)}")
+            else:
+                st.warning("Saved KN rule file not found. Please upload again.")
+                st.session_state.config_data['rule_kn_file'] = None
+        
+        # Advanced Configuration
+        with st.expander("🔧 Advanced Configuration"):
             output_folder = st.text_input(
                 "Output Folder",
                 value=st.session_state.config_data.get('output_folder', config.DEFAULT_OUTPUT_FOLDER),
@@ -193,8 +181,7 @@ def main():
             if output_folder != st.session_state.config_data.get('output_folder'):
                 st.session_state.config_data['output_folder'] = output_folder
                 update_config('output_folder', output_folder)
-        
-        with col2:
+            
             chunk_size = st.number_input(
                 "Chunk Size",
                 min_value=1000,

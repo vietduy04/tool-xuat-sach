@@ -52,7 +52,7 @@ def compute_result_for_subset(
     rules: pd.DataFrame,
     left_on: List[str],
     right_on: List[str]
-) -> Tuple[pd.Series, pd.Series]:
+) -> Tuple[pd.Series, pd.Series, pd.Series]:
     """
     Vectorized join between df_subset and rules.
     
@@ -63,10 +63,14 @@ def compute_result_for_subset(
         right_on: Columns to join on from rules
         
     Returns:
-        Tuple of (result Series, deadline Series)
+        Tuple of (result Series, deadline Series, timedelta Series)
     """
     if df_subset.empty:
-        return pd.Series(dtype='object'), pd.Series(dtype='datetime64[ns]')
+        return (
+            pd.Series(dtype='object'),
+            pd.Series(dtype='datetime64[ns]'),
+            pd.Series(dtype='string')
+        )
     
     try:
         # Keep original index
@@ -115,23 +119,70 @@ def compute_result_for_subset(
         else:
             merged['flag'] = False
         
-        # Aggregations per original row index
+        # Filter to only rows with time_match and ensure one match per original row
+        matched_rows = merged[merged['time_match'] == True].copy()
+        
+        # If multiple matches exist for same __idx, keep only the first one
+        if not matched_rows.empty:
+            matched_rows = matched_rows.drop_duplicates(subset='__idx', keep='first')
+        
+        # Create mapping from __idx to matched rule data
+        matched_dict = {}
+        if not matched_rows.empty:
+            matched_dict = matched_rows.set_index('__idx')[['expected_dt', 'flag']].to_dict('index')
+        
+        # Aggregations per original row index (for determining result status)
         agg = merged.groupby('__idx').agg(
             matched_rules_count=('matched_rule', 'sum'),
-            any_time_match=('time_match', 'max'),
-            any_flag_true=('flag', 'max'),
-            expected_dt=('expected_dt', 'last')
+            any_time_match=('time_match', 'max')
         ).reindex(df_subset.index, fill_value=0)
+        
+        # Extract expected_dt and flag from matched rule (correct one, not aggregated)
+        expected_dt_series = pd.Series(index=df_subset.index, dtype='datetime64[ns]')
+        matched_flag_series = pd.Series(index=df_subset.index, dtype='bool')
+        for idx in df_subset.index:
+            if idx in matched_dict:
+                expected_dt_series[idx] = matched_dict[idx]['expected_dt']
+                matched_flag_series[idx] = matched_dict[idx]['flag']
+            else:
+                matched_flag_series[idx] = False
         
         # Determine final result per index
         res = pd.Series(index=agg.index, dtype='object')
         res[agg['matched_rules_count'] == 0] = 'Check lại'
         mask_have_rules = agg['matched_rules_count'] > 0
         res[mask_have_rules & (~agg['any_time_match'].astype(bool))] = 'Thiếu config'
-        res[mask_have_rules & (agg['any_time_match'].astype(bool)) & (agg['any_flag_true'].astype(bool))] = 'Đúng'
-        res[mask_have_rules & (agg['any_time_match'].astype(bool)) & (~agg['any_flag_true'].astype(bool))] = 'Sai hẹn'
+        res[mask_have_rules & (agg['any_time_match'].astype(bool)) & matched_flag_series] = 'Đúng'
+        res[mask_have_rules & (agg['any_time_match'].astype(bool)) & (~matched_flag_series)] = 'Sai hẹn'
         
-        return res, agg['expected_dt']
+        # Calculate timedelta only for "Sai hẹn" rows
+        timedelta_series = pd.Series(index=df_subset.index, dtype='timedelta64[ns]')
+        sai_hen_mask = res == 'Sai hẹn'
+        if sai_hen_mask.any():
+            tg_laixe_nhan = pd.to_datetime(df_subset.loc[sai_hen_mask, 'tg_laixe_nhan'])
+            expected_dt_for_sai_hen = expected_dt_series[sai_hen_mask]
+            # Calculate timedelta: tg_laixe_nhan - expected_dt (positive means late)
+            timedelta_series[sai_hen_mask] = tg_laixe_nhan - expected_dt_for_sai_hen
+
+            # Convert timedelta to string format "D.HH:MM:SS" for PowerQuery
+            td = timedelta_series.dt.components
+            timedelta_text = pd.Series(index=timedelta_series.index, dtype="string")
+            
+            # Format only valid rows
+            timedelta_text[sai_hen_mask] = (
+                td.loc[sai_hen_mask, "days"].astype("int64").astype(str)
+                + "."
+                + td.loc[sai_hen_mask, "hours"].astype("int64").astype(str).str.zfill(2)
+                + ":"
+                + td.loc[sai_hen_mask, "minutes"].astype("int64").astype(str).str.zfill(2)
+                + ":"
+                + td.loc[sai_hen_mask, "seconds"].astype("int64").astype(str).str.zfill(2)
+            )
+
+            # Leave NaT as empty string instead of NA
+            timedelta_text[~sai_hen_mask] = ""
+        
+        return res, expected_dt_series, timedelta_text
     except Exception as e:
         logger.error(f"Error computing result for subset: {e}")
         raise
@@ -175,6 +226,7 @@ def process_chunk(
         # Prepare result column default 'Check lại' & NaT (will be overwritten)
         df['Result_p'] = 'Check lại'
         df['deadline'] = pd.NaT
+        df['timedelta'] = pd.Series(dtype='timedelta64[ns]', index=df.index)
         
         # Store original index for mapping
         df.index.name = 'orig_idx'
@@ -182,7 +234,7 @@ def process_chunk(
         # RD subset
         df_RD = df[df['phan_loai'] == 'RD']
         if not df_RD.empty:
-            res_RD, deadline_RD = compute_result_for_subset(
+            res_RD, deadline_RD, timedelta_RD = compute_result_for_subset(
                 df_RD,
                 rule_RD,
                 left_on=['don_vi_khaithac', 'ma_buucuc_phat'],
@@ -190,11 +242,12 @@ def process_chunk(
             )
             df.loc[res_RD.index, 'Result_p'] = res_RD
             df.loc[deadline_RD.index, 'deadline'] = deadline_RD
+            df.loc[timedelta_RD.index, 'timedelta'] = timedelta_RD
         
         # KN subset
         df_KN = df[df['phan_loai'] == 'KN']
         if not df_KN.empty:
-            res_KN, deadline_KN = compute_result_for_subset(
+            res_KN, deadline_KN, timedelta_KN = compute_result_for_subset(
                 df_KN,
                 rule_KN,
                 left_on=['don_vi_khaithac', 'chi_nhanh_phat'],
@@ -202,6 +255,7 @@ def process_chunk(
             )
             df.loc[res_KN.index, 'Result_p'] = res_KN
             df.loc[deadline_KN.index, 'deadline'] = deadline_KN
+            df.loc[timedelta_KN.index, 'timedelta'] = timedelta_KN
         
         logger.debug(f"Processed chunk with {len(df)} rows")
         return df
