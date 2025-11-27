@@ -3,6 +3,7 @@
 import os
 import tempfile
 import time
+from typing import Sequence
 
 import pandas as pd
 import streamlit as st
@@ -14,7 +15,7 @@ from etl.preprocess import preprocess_chunk
 from etl.process import preprocess_rules, process_chunk
 from etl.validate import validate_chunk
 from utils.logger import get_logger
-from utils.persistence import load_config, save_config, update_config
+from utils.persistence import load_config, update_config
 
 logger = get_logger()
 
@@ -31,6 +32,7 @@ if "total_rows" not in st.session_state:
     st.session_state.total_rows = 0
 
 
+@st.cache_data
 def save_uploaded_file(uploaded_file, file_type: str, persistent: bool = False) -> str:
     """Save uploaded file to temporary or persistent location."""
     if persistent:
@@ -46,160 +48,6 @@ def save_uploaded_file(uploaded_file, file_type: str, persistent: bool = False) 
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     return file_path
-
-
-# Title and Description
-st.title("Luồng ETL Xuất sạch")
-st.markdown("""
-Đọc kĩ hưỡng dẫn sử dụng trước khi dùng
-""")
-
-# Tabs
-tab1, tab2, tab3 = st.tabs(["About", "Config", "Process"], default="Process")
-
-with tab1:  # About tab
-    st.subheader("Mô tả chung")
-    st.markdown("Mô tả về luồng, cách sử dụng và yêu cầu với các trường")
-
-with tab2:  # Config tab
-    st.subheader("⚙️ Configuration")
-
-    st.markdown("Lookup Table")
-    lookup_file = st.file_uploader(
-        "Upload file Excel tham chiếu", type=["xlsx"], key="lookup_uploader"
-    )
-    if lookup_file is not None:
-        lookup_path = save_uploaded_file(lookup_file, "lookup", persistent=True)
-        st.session_state.config_data["lookup_file"] = lookup_path
-        update_config("lookup_file", lookup_path)
-        st.success(f"✓ Lookup file uploaded: {lookup_file.name}")
-    elif st.session_state.config_data.get("lookup_file"):
-        lookup_path = st.session_state.config_data["lookup_file"]
-        if os.path.exists(lookup_path):
-            st.info(f"Using saved file: {os.path.basename(lookup_path)}")
-        else:
-            st.warning("Saved lookup file not found. Please upload again.")
-            st.session_state.config_data["lookup_file"] = None
-
-    st.markdown("Rules")
-    rule_rd_file = st.file_uploader(
-        "Upload rule Rải đích", type=["xlsx"], key="rule_rd_uploader"
-    )
-    if rule_rd_file is not None:
-        rule_rd_path = save_uploaded_file(rule_rd_file, "rule_rd", persistent=True)
-        st.session_state.config_data["rule_rd_file"] = rule_rd_path
-        update_config("rule_rd_file", rule_rd_path)
-        st.success(f"✓ RD rule file uploaded: {rule_rd_file.name}")
-    elif st.session_state.config_data.get("rule_rd_file"):
-        rule_rd_path = st.session_state.config_data["rule_rd_file"]
-        if os.path.exists(rule_rd_path):
-            st.info(f"Using saved file: {os.path.basename(rule_rd_path)}")
-        else:
-            st.warning("Saved RD rule file not found. Please upload again.")
-            st.session_state.config_data["rule_rd_file"] = None
-
-    rule_kn_file = st.file_uploader(
-        "Upload rule Kết nối", type=["xlsx"], key="rule_kn_uploader"
-    )
-    if rule_kn_file is not None:
-        rule_kn_path = save_uploaded_file(rule_kn_file, "rule_kn", persistent=True)
-        st.session_state.config_data["rule_kn_file"] = rule_kn_path
-        update_config("rule_kn_file", rule_kn_path)
-        st.success(f"✓ KN rule file uploaded: {rule_kn_file.name}")
-    elif st.session_state.config_data.get("rule_kn_file"):
-        rule_kn_path = st.session_state.config_data["rule_kn_file"]
-        if os.path.exists(rule_kn_path):
-            st.info(f"Using saved file: {os.path.basename(rule_kn_path)}")
-        else:
-            st.warning("Saved KN rule file not found. Please upload again.")
-            st.session_state.config_data["rule_kn_file"] = None
-
-    # Advanced Configuration
-    with st.expander("🔧 Advanced Configuration"):
-        output_folder = st.text_input(
-            "Output Folder",
-            value=st.session_state.config_data.get(
-                "output_folder", config.DEFAULT_OUTPUT_FOLDER
-            ),
-            key="output_folder_input",
-        )
-        if output_folder != st.session_state.config_data.get("output_folder"):
-            st.session_state.config_data["output_folder"] = output_folder
-            update_config("output_folder", output_folder)
-
-        chunk_size = st.number_input(
-            "Chunk Size",
-            min_value=1000,
-            max_value=1000000,
-            value=st.session_state.config_data.get(
-                "chunk_size", config.DEFAULT_CHUNK_SIZE
-            ),
-            step=10000,
-            key="chunk_size_input",
-        )
-        if chunk_size != st.session_state.config_data.get("chunk_size"):
-            st.session_state.config_data["chunk_size"] = int(chunk_size)
-            update_config("chunk_size", int(chunk_size))
-
-with tab3:  # Process tab
-    st.subheader("🔄 Processing")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Raw Files")
-        raw_files = st.file_uploader(
-            "Upload Raw Excel Files",
-            type=["xlsx"],
-            accept_multiple_files=True,
-            key="raw_files_uploader",
-        )
-        report_type_options = ["Báo cáo XS kho vùng tỉnh", "Báo cáo XS TTKT"]
-        report_type = st.selectbox(
-            "Loại báo cáo",
-            options=report_type_options,
-            index=0,
-            key="report_type_select",
-        )
-        st.session_state.report_type = report_type
-
-        separate_files = st.checkbox(
-            "Output to separate files for each rule type",
-            value=True,
-            key="separate_files_checkbox",
-        )
-
-        if st.button(
-            "🚀 Process Files", type="primary", disabled=st.session_state.processing
-        ):
-            if not raw_files:
-                st.error("Cần upload file raw để chạy")
-            elif not st.session_state.config_data.get("lookup_file"):
-                st.error("Cần upload file tham chiếu")
-            elif not st.session_state.config_data.get("rule_rd_file"):
-                st.error("Cần upload rule Rải đích")
-            elif not st.session_state.config_data.get("rule_kn_file"):
-                st.error("Cần upload rule Kết nối")
-            else:
-                process_files(raw_files, separate_files, report_type)
-
-    with col2:
-        st.subheader("Output")
-        if st.session_state.processing:
-            st.info("Processing in progress...")
-            progress_bar = st.progress(st.session_state.progress)
-            st.metric("Total Rows Processed", st.session_state.total_rows)
-        else:
-            if "output_files" in st.session_state:
-                st.success("Processing completed!")
-                st.metric("Total Rows Processed", st.session_state.total_rows)
-                st.write("**Output Files:**")
-                for file_path in st.session_state.output_files:
-                    st.code(file_path)
-                    if os.path.exists(file_path):
-                        file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
-                        st.caption(f"Size: {file_size:.2f} MB")
-
-st.divider()
 
 
 def process_files(raw_files, separate_files: bool, report_type: str):
@@ -332,3 +180,156 @@ def process_files(raw_files, separate_files: bool, report_type: str):
         st.code(traceback.format_exc())
     finally:
         st.session_state.processing = False
+
+
+# Title and Description
+st.title("Báo cáo Xuất sạch")
+
+# Tabs
+tab1, tab2 = st.tabs(["About", "Process"], default="Process")
+
+with tab1:  # Tab 1: About
+    st.subheader("Mô tả chung")
+    st.markdown("Mô tả về luồng, cách sử dụng và yêu cầu với các file dữ liệu")
+
+with tab2:  # Tab 2: Config + Process
+    col1, col2 = st.columns([0.4, 0.6])
+
+    with col1:
+        st.subheader("⚙️ Config")
+
+        st.markdown("**Loại báo cáo**")
+        report_type = st.selectbox(
+            "Loại báo cáo",
+            options=["Báo cáo XS kho vùng tỉnh", "Báo cáo XS TTKT"],
+            index=0,
+            key="report_type_select",
+            label_visibility="collapsed",
+        )
+
+        # Lookup block
+        if st.session_state.get("lookup_file"):
+            lookup_path = save_uploaded_file(
+                st.session_state["lookup_file"], "lookup", persistent=True
+            )
+            st.session_state.config_data["lookup_file"] = lookup_path
+            update_config("lookup_file", lookup_path)
+            st.markdown(
+                """**Tham chiếu tỉnh thành cũ**: :green-background[Upload thành công]"""
+            )
+        elif st.session_state.config_data.get("lookup_file"):
+            lookup_path = st.session_state.config_data["lookup_file"]
+            if os.path.exists(lookup_path):
+                st.markdown(
+                    f"""**Tham chiếu tỉnh thành cũ**: :blue-background[Dùng file cũ: {os.path.basename(lookup_path)}]"""
+                )
+        else:
+            st.markdown("**Tham chiếu tỉnh thành cũ**")
+
+        lookup_file = st.file_uploader(
+            "File Excel tham chiếu tỉnh cũ",
+            type=["xlsx"],
+            key="lookup_file",
+            label_visibility="collapsed",
+            disabled=st.session_state.processing,
+        )
+
+        # Rule RD block
+        if st.session_state.get("rule_rd_file"):
+            rule_rd_path = save_uploaded_file(
+                st.session_state["rule_rd_file"], "rule_rd", persistent=True
+            )
+            st.session_state.config_data["rule_rd_file"] = rule_rd_path
+            update_config("rule_rd_file", rule_rd_path)
+            st.markdown("""**Rule Rải đích**: :green-background[Upload thành công]""")
+        elif st.session_state.config_data.get("rule_rd_file"):
+            rule_rd_path = st.session_state.config_data["rule_rd_file"]
+            if os.path.exists(rule_rd_path):
+                st.markdown(
+                    f"""**Rule Rải đích**: :blue-background[Dùng file cũ: {os.path.basename(rule_rd_path)}]"""
+                )
+        else:
+            st.markdown("**Rule Rải đích**")
+
+        rule_rd_file = st.file_uploader(
+            "File excel Rule Rải đích",
+            type=["xlsx"],
+            key="rule_rd_file",
+            label_visibility="collapsed",
+            disabled=st.session_state.processing,
+        )
+
+        # Rule kn block
+        if st.session_state.get("rule_kn_file"):
+            rule_kn_path = save_uploaded_file(
+                st.session_state["rule_kn_file"], "rule_kn", persistent=True
+            )
+            st.session_state.config_data["rule_kn_file"] = rule_kn_path
+            update_config("rule_kn_file", rule_kn_path)
+            st.markdown("""**Rule Rải đích**: :green-background[Upload thành công]""")
+        elif st.session_state.config_data.get("rule_kn_file"):
+            rule_kn_path = st.session_state.config_data["rule_kn_file"]
+            if os.path.exists(rule_kn_path):
+                st.markdown(
+                    f"""**Rule Rải đích**: :blue-background[Dùng file cũ: {os.path.basename(rule_kn_path)}]"""
+                )
+        else:
+            st.markdown("**Rule Rải đích**")
+
+        rule_kn_file = st.file_uploader(
+            "File excel Rule Rải đích",
+            type=["xlsx"],
+            key="rule_kn_file",
+            label_visibility="collapsed",
+            disabled=st.session_state.processing,
+        )
+
+    with col2:
+        st.subheader("🔄 Process")
+
+        st.markdown("**File Excel / CSV raw**")
+        raw_files = st.file_uploader(
+            "Upload Raw Excel Files",
+            type=["xlsx"],
+            accept_multiple_files=True,
+            key="raw_files_uploader",
+            label_visibility="collapsed",
+        )
+
+        st.session_state.report_type = report_type
+
+        separate_files = st.checkbox(
+            "Output to separate files for each rule type",
+            value=True,
+            key="separate_files_checkbox",
+        )
+
+        if st.button(
+            "🚀 Process Files", type="primary", disabled=st.session_state.processing
+        ):
+            if not raw_files:
+                st.error("Cần upload file raw để chạy")
+            elif not st.session_state.config_data.get("lookup_file"):
+                st.error("Cần upload file tham chiếu")
+            elif not st.session_state.config_data.get("rule_rd_file"):
+                st.error("Cần upload rule Rải đích")
+            elif not st.session_state.config_data.get("rule_kn_file"):
+                st.error("Cần upload rule Kết nối")
+            else:
+                process_files(raw_files, separate_files, report_type)
+
+        st.subheader("Output")
+        if st.session_state.processing:
+            st.info("Processing in progress...")
+            progress_bar = st.progress(st.session_state.progress)
+            st.metric("Total Rows Processed", st.session_state.total_rows)
+        else:
+            if "output_files" in st.session_state:
+                st.success("Processing completed!")
+                st.metric("Total Rows Processed", st.session_state.total_rows)
+                st.write("**Output Files:**")
+                for file_path in st.session_state.output_files:
+                    st.code(file_path)
+                    if os.path.exists(file_path):
+                        file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
+                        st.caption(f"Size: {file_size:.2f} MB")
