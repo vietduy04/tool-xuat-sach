@@ -1,15 +1,14 @@
 """Streamlit UI for ETL Pipeline."""
 
 import os
-import tempfile
 import time
-from typing import Optional, Sequence
+from typing import Sequence
 
 import pandas as pd
 import streamlit as st
 
 import config
-from etl.ingest import convert_excel_to_csv
+from etl.ingest import convert_excel_to_csv, save_file
 from etl.output import combine_csv_files, write_chunk_to_csv
 from etl.preprocess import preprocess_chunk
 from etl.process import preprocess_rules, process_chunk
@@ -32,32 +31,14 @@ if "total_rows" not in st.session_state:
     st.session_state.total_rows = 0
 
 
-@st.cache_data
-def save_uploaded_file(uploaded_file, persistent: bool = False) -> str:
-    """Save uploaded file to temporary or persistent location."""
-    if persistent:
-        # Save to a persistent config directory
-        config_dir = os.path.join(os.getcwd(), ".config_files")
-        os.makedirs(config_dir, exist_ok=True)
-        file_path = os.path.join(config_dir, f"{uploaded_file.name}")
-    else:
-        # Save to temporary location
-        temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, uploaded_file.name)
-
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    return file_path
-
-
 def config_uploader(
-    filename,
-    filetype,
-    label,
+    label: str,
+    config_name: str,
+    filetype: str | Sequence[str] | None,
 ) -> None:
     # Name + status
-    uploaded = st.session_state.get(filename)
-    config_path = st.session_state.config_data.get(filename)
+    uploaded = st.session_state.get(config_name)
+    config_path = st.session_state.config_data.get(config_name)
     if not uploaded:
         if not config_path or not os.path.exists(config_path):
             st.markdown(f"**{label}**")
@@ -67,18 +48,16 @@ def config_uploader(
                 f":blue-background[Dùng file cũ: {os.path.basename(config_path)}]"
             )
     else:
-        path = save_uploaded_file(uploaded, persistent=True)
-        st.session_state.config_data[filename] = path
-        update_config(filename, path)
-        st.markdown(
-            "**Tham chiếu tỉnh thành cũ**: :green-background[Upload thành công]"
-        )
+        path = save_file(uploaded, persistent=True)
+        st.session_state.config_data[config_name] = path
+        update_config(config_name, path)
+        st.markdown(f"**{label}**: :green-background[Upload thành công]")
 
     # Uploader
-    uploader = st.file_uploader(
+    uploader = st.file_uploader(  # noqa: F841
         label,
         type=filetype,
-        key=filename,
+        key=config_name,
         label_visibility="collapsed",
         disabled=st.session_state.processing,
     )
@@ -135,7 +114,7 @@ def process_files(raw_files, separate_files: bool, report_type: str):
                 f"Processing file {file_idx + 1}/{total_files}: {raw_file.name}..."
             ) as status:
                 # Save uploaded file temporarily
-                temp_excel_path = save_uploaded_file(raw_file, "raw")
+                temp_excel_path = save_file(raw_file, "raw")
 
                 # Ingest
                 status.update(label=f"Ingesting {raw_file.name}...")
@@ -196,7 +175,7 @@ def process_files(raw_files, separate_files: bool, report_type: str):
                         os.remove(kn_output_file)
                 except:
                     pass
-                st.session_state.output_files = [combined_output_file]
+                st.session_state.output_files = [combined_output_file]  # pyright: ignore[reportPossiblyUnboundVariable]
                 status.update(label="Files combined", state="complete")
         else:
             st.session_state.output_files = [rd_output_file, kn_output_file]
@@ -241,85 +220,21 @@ with tab2:  # Tab 2: Config + Process
             label_visibility="collapsed",
         )
 
-        config_uploader("lookup_file", "xlsx", "Tham chiếu tỉnh thành cũ")
-        config_uploader("rule_rd_file", "xlsx", "Rule Rải đích")
-        config_uploader("rule_kn_file", "xlsx", "Rule Kết nối")
-        # Lookup block
-        # if st.session_state.get("lookup_file"):
-        #     lookup_path = save_uploaded_file(
-        #         st.session_state["lookup_file"], persistent=True
-        #     )
-        #     st.session_state.config_data["lookup_file"] = lookup_path
-        #     update_config("lookup_file", lookup_path)
-        #     st.markdown(
-        #         """**Tham chiếu tỉnh thành cũ**: :green-background[Upload thành công]"""
-        #     )
-        # elif st.session_state.config_data.get("lookup_file"):
-        #     lookup_path = st.session_state.config_data["lookup_file"]
-        #     if os.path.exists(lookup_path):
-        #         st.markdown(
-        #             f"""**Tham chiếu tỉnh thành cũ**: :blue-background[Dùng file cũ: {os.path.basename(lookup_path)}]"""
-        #         )
-        # else:
-        #     st.markdown("**Tham chiếu tỉnh thành cũ**")
-
-        # lookup_file = st.file_uploader(
-        #     "File Excel tham chiếu tỉnh cũ",
-        #     type=["xlsx"],
-        #     key="lookup_file",
-        #     label_visibility="collapsed",
-        #     disabled=st.session_state.processing,
-        # )
-
-        # Rule RD block
-        # if st.session_state.get("rule_rd_file"):
-        #     rule_rd_path = save_uploaded_file(
-        #         st.session_state["rule_rd_file"], persistent=True
-        #     )
-        #     st.session_state.config_data["rule_rd_file"] = rule_rd_path
-        #     update_config("rule_rd_file", rule_rd_path)
-        #     st.markdown("""**Rule Rải đích**: :green-background[Upload thành công]""")
-        # elif st.session_state.config_data.get("rule_rd_file"):
-        #     rule_rd_path = st.session_state.config_data["rule_rd_file"]
-        #     if os.path.exists(rule_rd_path):
-        #         st.markdown(
-        #             f"""**Rule Rải đích**: :blue-background[Dùng file cũ: {os.path.basename(rule_rd_path)}]"""
-        #         )
-        # else:
-        #     st.markdown("**Rule Rải đích**")
-
-        # rule_rd_file = st.file_uploader(
-        #     "File excel Rule Rải đích",
-        #     type=["xlsx"],
-        #     key="rule_rd_file",
-        #     label_visibility="collapsed",
-        #     disabled=st.session_state.processing,
-        # )
-
-        # # Rule kn block
-        # if st.session_state.get("rule_kn_file"):
-        #     rule_kn_path = save_uploaded_file(
-        #         st.session_state["rule_kn_file"], persistent=True
-        #     )
-        #     st.session_state.config_data["rule_kn_file"] = rule_kn_path
-        #     update_config("rule_kn_file", rule_kn_path)
-        #     st.markdown("""**Rule Kết nối**: :green-background[Upload thành công]""")
-        # elif st.session_state.config_data.get("rule_kn_file"):
-        #     rule_kn_path = st.session_state.config_data["rule_kn_file"]
-        #     if os.path.exists(rule_kn_path):
-        #         st.markdown(
-        #             f"""**Rule Kết nối**: :blue-background[Dùng file cũ: {os.path.basename(rule_kn_path)}]"""
-        #         )
-        # else:
-        #     st.markdown("**Rule Kết nối**")
-
-        # rule_kn_file = st.file_uploader(
-        #     "File excel Rule Kết nối",
-        #     type=["xlsx"],
-        #     key="rule_kn_file",
-        #     label_visibility="collapsed",
-        #     disabled=st.session_state.processing,
-        # )
+        config_uploader(
+            "Tham chiếu tỉnh thành cũ",
+            "lookup_file",
+            "xlsx",
+        )
+        config_uploader(
+            "Rule Rải đích",
+            "rule_rd_file",
+            "xlsx",
+        )
+        config_uploader(
+            "Rule Kết nối",
+            "rule_kn_file",
+            "xlsx",
+        )
 
     with col2:
         st.subheader("🔄 Process")
