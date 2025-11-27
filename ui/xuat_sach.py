@@ -266,18 +266,18 @@ with tab2:  # Tab 2: Config + Process
             )
             st.session_state.config_data["rule_kn_file"] = rule_kn_path
             update_config("rule_kn_file", rule_kn_path)
-            st.markdown("""**Rule Rải đích**: :green-background[Upload thành công]""")
+            st.markdown("""**Rule Kết nối**: :green-background[Upload thành công]""")
         elif st.session_state.config_data.get("rule_kn_file"):
             rule_kn_path = st.session_state.config_data["rule_kn_file"]
             if os.path.exists(rule_kn_path):
                 st.markdown(
-                    f"""**Rule Rải đích**: :blue-background[Dùng file cũ: {os.path.basename(rule_kn_path)}]"""
+                    f"""**Rule Kết nối**: :blue-background[Dùng file cũ: {os.path.basename(rule_kn_path)}]"""
                 )
         else:
-            st.markdown("**Rule Rải đích**")
+            st.markdown("**Rule Kết nối**")
 
         rule_kn_file = st.file_uploader(
-            "File excel Rule Rải đích",
+            "File excel Rule Kết nối",
             type=["xlsx"],
             key="rule_kn_file",
             label_visibility="collapsed",
