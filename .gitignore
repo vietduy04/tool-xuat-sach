@@ -12,6 +12,7 @@ ENV/
 # Streamlit
 .streamlit_config.json
 .config_files/
+.store/
 
 # Output files
 output/
@@ -30,4 +31,3 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
-
