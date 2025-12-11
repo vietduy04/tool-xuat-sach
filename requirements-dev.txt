@@ -1,0 +1,7 @@
+streamlit
+python-calamine
+openpyxl
+polars
+fastexcel
+xlsxwriter
+ipykernel

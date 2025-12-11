@@ -1,34 +1,26 @@
 """Streamlit UI for ETL Pipeline."""
 
 import os
-import time
 from typing import Sequence
 
-import pandas as pd
 import streamlit as st
-
-import config
-from etl.ingest import convert_excel_to_csv, save_file
-from etl.output import combine_csv_files, write_chunk_to_csv
-from etl.preprocess import preprocess_chunk
-from etl.process import process_files
-from etl.validate import validate_chunk
+from etl.io import save_file
+from etl.pipeline_xuatsach import import_lookup, import_rule, processing_pipeline
 from utils.logger import get_logger
 from utils.persistence import load_config, update_config
 
 logger = get_logger()
 
 # Page configuration
+st.set_page_config(layout="wide")
 
 # Initialize session state
 if "config_data" not in st.session_state:
     st.session_state.config_data = load_config()
 if "processing" not in st.session_state:
     st.session_state.processing = False
-if "progress" not in st.session_state:
-    st.session_state.progress = 0
-if "total_rows" not in st.session_state:
-    st.session_state.total_rows = 0
+
+# ------ UI components ------
 
 
 def config_uploader(
@@ -66,11 +58,32 @@ def config_uploader(
     )
 
 
+def synced_radio(label, options, config_key, **radio_kwargs):
+    # read current default from config
+    current = st.session_state.config_data.get(config_key, options[0])
+
+    # render radio
+    choice = st.radio(
+        label,
+        options,
+        index=options.index(current),
+        key=f"radio_{config_key}",
+        **radio_kwargs,
+    )
+
+    # update config if changed
+    if choice != current:
+        update_config(config_key, choice)
+        st.session_state.config_data[config_key] = choice
+
+    return choice
+
+
 # Title and Description
 st.title("Báo cáo Xuất sạch")
 
 # Tabs
-tab1, tab2 = st.tabs(["About", "Process"], default="Process")
+tab1, tab2 = st.tabs(["Giới thiệu", "Xử lý"], default="Xử lý")
 
 with tab1:  # Tab 1: About
     st.subheader("Mô tả chung")
@@ -80,79 +93,82 @@ with tab2:  # Tab 2: Config + Process
     col1, col2 = st.columns([0.4, 0.6])
 
     with col1:
-        st.subheader("⚙️ Config")
+        st.subheader("⚙️ Cài đặt")
 
-        st.markdown("**Loại báo cáo**")
-        report_type = st.selectbox(
+        report_type = st.radio(
             "Loại báo cáo",
-            options=["Báo cáo XS kho vùng tỉnh", "Báo cáo XS TTKT"],
-            index=0,
+            ["Xuất sạch Kho vùng tỉnh (HUB)", "Xuất sạch TTKT"],
             key="report_type_select",
-            label_visibility="collapsed",
         )
 
+        st.divider()
         config_uploader(
             "Tham chiếu tỉnh thành cũ",
-            "lookup_file",
+            "lookup",
             "xlsx",
         )
         config_uploader(
             "Rule Rải đích",
-            "rule_rd_file",
+            "rule_rd",
             "xlsx",
         )
         config_uploader(
             "Rule Kết nối",
-            "rule_kn_file",
+            "rule_kn",
             "xlsx",
         )
 
     with col2:
-        st.subheader("🔄 Process")
+        st.subheader("🔄 Xử lý dữ li")
 
-        st.markdown("**File Excel / CSV raw**")
+        st.markdown("**File XLSX / CSV raw**")
+
+        raw_format = st.radio(
+            "Loại file Raw",
+            ["xlsx", "csv"],
+            key="report_type_select",
+            horizontal=True,
+        )
+
         raw_files = st.file_uploader(
             "Upload Raw Excel Files",
-            type=["xlsx"],
+            type=raw_format,
             accept_multiple_files=True,
             key="raw_files_uploader",
             label_visibility="collapsed",
         )
 
-        st.session_state.report_type = report_type
-
-        separate_files = st.checkbox(
-            "Output to separate files for each rule type",
-            value=True,
-            key="separate_files_checkbox",
+        output_format = synced_radio(
+            "Loại file output",
+            ["xlsx", "csv"],
+            "report_type",
+            horizontal=True,
         )
 
         if st.button(
-            "🚀 Process Files", type="primary", disabled=st.session_state.processing
+            "Bắt đầu xử lý", type="primary", disabled=st.session_state.processing
         ):
             if not raw_files:
                 st.error("Cần upload file raw để chạy")
-            elif not st.session_state.config_data.get("lookup_file"):
+            elif not st.session_state.config_data.get("lookup"):
                 st.error("Cần upload file tham chiếu")
-            elif not st.session_state.config_data.get("rule_rd_file"):
+            elif not st.session_state.config_data.get("rule_rd"):
                 st.error("Cần upload rule Rải đích")
-            elif not st.session_state.config_data.get("rule_kn_file"):
+            elif not st.session_state.config_data.get("rule_kn"):
                 st.error("Cần upload rule Kết nối")
             else:
-                process_files(raw_files, separate_files, report_type)
+                processing_pipeline(raw_files, raw_format, report_type)
 
         st.subheader("Output")
         if st.session_state.processing:
             st.info("Processing in progress...")
-            progress_bar = st.progress(st.session_state.progress)
-            st.metric("Total Rows Processed", st.session_state.total_rows)
         else:
             if "output_files" in st.session_state:
                 st.success("Processing completed!")
-                st.metric("Total Rows Processed", st.session_state.total_rows)
-                st.write("**Output Files:**")
-                for file_path in st.session_state.output_files:
-                    st.code(file_path)
-                    if os.path.exists(file_path):
-                        file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
-                        st.caption(f"Size: {file_size:.2f} MB")
+                # st.metric("Total Rows Processed", st.session_state.total_rows)
+                # st.write("**Output Files:**")
+                # for file_path in st.session_state.output_files:
+                #     st.code(file_path)
+                #     if os.path.exists(file_path):
+                #         file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
+                #         st.caption(f"Size: {file_size:.2f} MB")
