@@ -6,3 +6,4 @@ toolbarMode = "viewer"
 
 [server]
 showEmailPrompt = false
+maxUploadSize = 10000

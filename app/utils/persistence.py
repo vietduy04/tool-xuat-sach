@@ -11,7 +11,7 @@ logger = get_logger()
 
 def load_config() -> Dict[str, Any]:
     """Load persisted configuration from JSON file."""
-    config_path = ".streamlit_config.json"  # Change config path
+    config_path = "app/config/config.json"  # Change config path
     if os.path.exists(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -24,6 +24,8 @@ def load_config() -> Dict[str, Any]:
         "lookup": None,
         "rule_rd": None,
         "rule_kn": None,
+        "rule_ttkt": None,
+        "output_path": "output",
         # "output_folder": DEFAULT_OUTPUT_FOLDER,
         # "output_format": DEFAULT_OUTPUT_FORMAT,
     }
@@ -31,7 +33,7 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(config_data: Dict[str, Any]) -> None:
     """Save configuration to JSON file."""
-    config_path = "config.json"  # Change config path
+    config_path = "app/config/config.json"  # Change config path
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)

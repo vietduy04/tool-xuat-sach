@@ -1,0 +1,9 @@
+{
+  "lookup": "C:\\Users\\Triangle\\Downloads\\vtp-streamline\\.store\\lookup.xlsx",
+  "rule_rd": "C:\\Users\\Triangle\\Downloads\\vtp-streamline\\.store\\RD - Copy.xlsx",
+  "rule_kn": "C:\\Users\\Triangle\\Downloads\\vtp-streamline\\.store\\KN.xlsx",
+  "rule_ttkt": "C:\\Users\\Triangle\\Downloads\\vtp-streamline\\.store\\rule_xs_ttkt_1012.xlsx",
+  "output_path": "output",
+  "raw_format": "xlsx",
+  "report_type_select": "Xuất sạch TTKT"
+}
