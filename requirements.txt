@@ -1,6 +1,4 @@
-streamlit
-python-calamine
-openpyxl
 polars
+python-calamine
 fastexcel
-xlsxwriter
+streamlit
