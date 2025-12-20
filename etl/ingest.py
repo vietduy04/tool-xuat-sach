@@ -8,7 +8,7 @@ from typing import Tuple
 
 import polars as pl
 
-MAX_WORKERS = 4
+MAX_WORKERS = 6
 
 
 def get_ext(file):
