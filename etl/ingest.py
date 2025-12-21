@@ -2,7 +2,6 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Iterable, Union
 
@@ -25,7 +24,7 @@ FileInput = Union[str, Path, object]
 
 # ---- helpers -------------------------------------------------
 def file_name(file: FileInput) -> str:
-    return file.name if hasattr(file, "name") else Path(file).name
+    return file.name if hasattr(file, "name") else Path(file).name  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
 
 
 def file_ext(file: FileInput) -> str:
