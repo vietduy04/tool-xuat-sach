@@ -32,6 +32,7 @@ def file_ext(file: FileInput) -> str:
 
 
 def extract_date(files: Iterable[FileInput]) -> str:
+    """Nhận dạng ngày từ tên file báo cáo"""
     dates = set()
 
     for file in files:
@@ -113,7 +114,7 @@ def import_files(
             files,
             reader=pl.read_excel,
             use_threads=fast_mode,
-            read_options={"skip_rows": 1},
+            read_options={"skip_rows": 1},  # Đọc file từ NOC có 2 dòng header bị merge
         )
 
     return ImportResult(
