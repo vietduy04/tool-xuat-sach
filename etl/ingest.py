@@ -15,7 +15,6 @@ DATE_PATTERN = re.compile(r"(\d{4}_\d{2}_\d{2})__\d+")
 @dataclass(frozen=True)
 class ImportResult:
     df: pl.DataFrame
-    rows: int
     date: str
 
 
@@ -119,6 +118,5 @@ def import_files(
 
     return ImportResult(
         df=df,
-        rows=df.height,
         date=date,
     )
