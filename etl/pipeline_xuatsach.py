@@ -225,6 +225,10 @@ def pipeline_xs_hub(
 
     # Transformation
 
+    # Add report_date from import result
+    if import_result.date != "":
+        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%Y-%m-%d").alias("report_date"))
+
     # Xác định chi nhánh hiện tại theo đơn vị khai thác
     lf = lf.with_columns(
         pl.col("don_vi_khaithac").str.slice(3, 3).alias("chi_nhanh_HUB")
@@ -343,6 +347,10 @@ def pipeline_xs_ttkt(
         ]
     )
     lf = df.lazy()
+
+    # Add report_date from import result
+    if import_result.date != "":
+        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%Y-%m-%d").alias("report_date"))
 
     # Tham chiếu miền phát từ bưu cục phát
     lf = lf.join(lookup_lf, how="left", left_on="ma_buucuc_phat", right_on="ma_buucuc").drop("ma_tinh")
