@@ -75,10 +75,10 @@ def load_threaded(
 def load_files(
     files: Iterable[FileInput],
     reader,
-    use_threads: bool,
+    use_threads: str,
     **opts,
 ) -> pl.DataFrame:
-    if use_threads:
+    if use_threads == "True":
         return load_threaded(files, reader, **opts)
 
     dfs = [reader(f, **opts) for f in files]
@@ -88,7 +88,7 @@ def load_files(
 # ---- public API ----------------------------------------------
 def import_files(
     files: Iterable[FileInput],
-    fast_mode: bool = False,
+    fast_mode: str = "False",
 ) -> ImportResult:
     files = list(files)
     extensions = {file_ext(f) for f in files}

@@ -171,7 +171,7 @@ def apply_rule(lf: pl.LazyFrame, rule: pl.LazyFrame, type: str) -> pl.LazyFrame:
 
 
 def pipeline_xs_hub(
-    input_files: list[BytesIO],
+    input_files: list,
     config: Dict
 ) -> Dict:
     """
@@ -227,7 +227,7 @@ def pipeline_xs_hub(
 
     # Add report_date from import result
     if import_result.date != "":
-        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%Y-%m-%d").alias("report_date"))
+        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%d-%m-%Y").alias("report_date"))
 
     # Xác định chi nhánh hiện tại theo đơn vị khai thác
     lf = lf.with_columns(
@@ -269,7 +269,36 @@ def pipeline_xs_hub(
 
     for type in outputs.keys():
         filtered = lf.filter(pl.col("phan_loai") == type)
-        outputs[type] = apply_rule(lf=filtered, rule=rules[type], type=type)
+        filtered = apply_rule(lf=filtered, rule=rules[type], type=type)
+
+        # Thêm timedelta
+        filtered = filtered.with_columns(
+            pl.when(pl.col("Result_p") == "Sai hẹn").then((pl.col("tg_laixe_nhan") - pl.col("deadline"))).alias("_time_delta")
+        )
+
+        filtered = filtered.with_columns([
+            (pl.col("_time_delta").abs().dt.total_seconds() // (24 * 60 * 60)).alias("days"),  # Calculate days
+            (pl.col("_time_delta").abs().dt.total_seconds() // 3600 % 24).alias("hours"),   # Calculate hours
+            (pl.col("_time_delta").abs().dt.total_seconds() // 60 % 60).alias("minutes"),    # Calculate minutes
+            (pl.col("_time_delta").abs().dt.total_seconds() % 60).alias("seconds")
+        ])
+
+        filtered = filtered.with_columns(
+            pl.concat_str([
+                pl.col("days").cast(pl.Utf8),
+                pl.lit("."),
+                pl.col("hours").cast(pl.Utf8).str.zfill(2),
+                pl.lit(":"),
+                pl.col("minutes").cast(pl.Utf8).str.zfill(2),
+                pl.lit(":"),
+                pl.col("seconds").cast(pl.Utf8).str.zfill(2),
+            ]).alias("timedelta")
+        )
+
+        # Cleanup sau khi thêm timedelta
+        outputs[type] = filtered.drop(["days", "hours", "minutes","seconds", "_time_delta"])
+
+        
 
     # --- Export ---
 
@@ -298,7 +327,7 @@ def pipeline_xs_hub(
     }
 
 def pipeline_xs_ttkt(
-    input_files: list[BytesIO],
+    input_files: list,
     config: Dict
 ) -> Dict:
     """
@@ -350,7 +379,7 @@ def pipeline_xs_ttkt(
 
     # Add report_date from import result
     if import_result.date != "":
-        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%Y-%m-%d").alias("report_date"))
+        lf = lf.with_columns(pl.lit(import_result.date).str.strptime(pl.Date, "%d-%m-%Y").alias("report_date"))
 
     # Tham chiếu miền phát từ bưu cục phát
     lf = lf.join(lookup_lf, how="left", left_on="ma_buucuc_phat", right_on="ma_buucuc").drop("ma_tinh")
@@ -381,6 +410,10 @@ def pipeline_xs_ttkt(
             pl.col("seconds").cast(pl.Utf8).str.zfill(2),
         ]).alias("timedelta")
     )
+
+    # Cleanup sau khi thêm timedelta
+    lf = lf.drop(["days", "hours", "minutes","seconds", "_time_delta"])
+
     # Tạo các cột trống làm placeholder
     lf = lf.with_columns(
         [
